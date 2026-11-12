@@ -1,4 +1,4 @@
-# fatalchat
+# ∆chat
 
 temporary encrypted chat. open the site, get a link, send it to someone, chat
 
