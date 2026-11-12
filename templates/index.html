@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>fatalchat</title>
+    <link rel="icon" href="/favicon.ico">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: monospace;
+            font-size: 15px;
+            color: rgb(200, 205, 200);
+            background-color: #303030;
+        }
+
+        #title-container {
+            font-size: 15px;
+            display: flex;
+            justify-content: center;
+            padding-top: 1rem;
+        }
+
+        #content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 1rem 1.5rem;
+            box-sizing: border-box;
+            min-height: 0;
+        }
+
+        .author {
+            color: rgb(180, 200, 180);
+        }
+
+        .chat-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: linear-gradient(to right,
+                    transparent 200px, #4a4a4a 200px,
+                    #4a4a4a 201px, transparent 201px);
+        }
+
+        .chat-container> :first-child {
+            margin-top: auto;
+        }
+
+        .message-container {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+        }
+
+        .meta {
+            text-align: right;
+            padding: 8px 14px 8px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .message {
+            padding: 8px 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .message-container:nth-child(even) .message {
+            background-color: #383838;
+        }
+
+        #composer {
+            display: flex;
+            align-items: stretch;
+            border-top: 1px solid #4a4a4a;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        #input {
+            flex: 1;
+            min-width: 0;
+            font: inherit;
+            font-size: 16px;
+            color: rgb(230, 235, 230);
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 20px 14px 20px 215px;
+            /* 200px column + 1px divider + 14px, so typed text lines up with messages */
+        }
+
+        #input::placeholder {
+            color: rgb(120, 135, 120);
+        }
+
+        #send {
+            font: inherit;
+            color: rgb(180, 200, 180);
+            background: transparent;
+            border: none;
+            padding: 0 20px;
+            cursor: pointer;
+        }
+
+        #send:hover {
+            color: rgb(235, 238, 235);
+            background: transparent;
+        }
+
+        @media (max-width: 700px) {
+            #input {
+                padding-left: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <pre class="title">
+   ___     __       __    __        __ 
+  / _/__ _/ /____ _/ /___/ /  ___ _/ /_
+ / _/ _ `/ __/ _ `/ / __/ _ \/ _ `/ __/
+/_/ \_,_/\__/\_,_/_/\__/_//_/\_,_/\__/ 
+</pre>
+
+        <p>Welcome to fatalchat, a minimal, temporary, encrypted chat.</p>
+        <p>A room is just a link. Start one, send the link to a friend, and talk.</p>
+        <p>The link ends in a secret key after the # sign. Your browser encrypts every message with that key before it
+            leaves, and the browser never sends the part after the # to the server.</p>
+        <p>The server only ever holds ciphertext, so it cannot read a room, and there are no room lists, so a room can
+            only be found by someone who has its link.</p>
+
+        <p class="gap">Start a new room: <a id="new" href="/">loading...</a></p>
+
+        <p class="gap">Things worth knowing:</p>
+        <p>Anyone with the full link can read and write in the room, so share it like a password.</p>
+        <p>If the link is lost, the room is lost. Nobody can recover the key, including the server.</p>
+        <p>Nothing is saved to disk. Messages live in the server's memory, and a restart wipes every room.</p>
+        <p>Names are random labels picked in your browser. They are not proof of who is typing.</p>
+        <p>The server can still see IP addresses, message timing, and message sizes.</p>
+        <p class="gap dim">Built with Flask and the browser's Web Crypto API. Messages use AES-GCM with a 256-bit key.
+        </p>
+    </main>
+
+    <script>
+
+
+        function toB64(bytes) {
+            let s = "";
+            bytes.forEach((b) => (s += String.fromCharCode(b)));
+            return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        }
+
+        // a fresh room ID and key, made in the browser so the server never sees the key
+        const id = toB64(crypto.getRandomValues(new Uint8Array(5)));
+        const key = toB64(crypto.getRandomValues(new Uint8Array(32)));
+        const url = "/?" + id + "#" + key;
+
+        const link = document.getElementById("new");
+        link.href = url;
+        link.textContent = location.host + url;
+    </script>
+</body>
+
+</html>

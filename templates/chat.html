@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>fatalchat</title>
+    <link rel="icon" href="/favicon.ico">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: monospace;
+            font-size: 15px;
+            color: rgb(200, 205, 200);
+            background-color: #303030;
+        }
+
+        #title-container {
+            font-size: 15px;
+            display: flex;
+            justify-content: center;
+            padding-top: 1rem;
+        }
+
+        #content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 1rem 1.5rem;
+            box-sizing: border-box;
+            min-height: 0;
+        }
+
+        .author {
+            color: rgb(180, 200, 180);
+        }
+
+        .chat-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: linear-gradient(to right,
+                    transparent 200px, #4a4a4a 200px,
+                    #4a4a4a 201px, transparent 201px);
+        }
+
+        .chat-container> :first-child {
+            margin-top: auto;
+        }
+
+        .message-container {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+        }
+
+        .meta {
+            text-align: right;
+            padding: 8px 14px 8px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .message {
+            padding: 8px 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .message-container:nth-child(even) .message {
+            background-color: #383838;
+        }
+
+        #composer {
+            display: flex;
+            align-items: stretch;
+            border-top: 1px solid #4a4a4a;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        #input {
+            flex: 1;
+            min-width: 0;
+            font: inherit;
+            font-size: 16px;
+            color: rgb(230, 235, 230);
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 20px 14px 20px 215px;
+            /* 200px column + 1px divider + 14px, so typed text lines up with messages */
+        }
+
+        #input::placeholder {
+            color: rgb(120, 135, 120);
+        }
+
+        #send {
+            font: inherit;
+            color: rgb(180, 200, 180);
+            background: transparent;
+            border: none;
+            padding: 0 20px;
+            cursor: pointer;
+        }
+
+        #send:hover {
+            color: rgb(235, 238, 235);
+            background: transparent;
+        }
+
+        @media (max-width: 700px) {
+            #input {
+                padding-left: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="title-container">
+        <pre class="title">
+   ___     __       __    __        __ 
+  / _/__ _/ /____ _/ /___/ /  ___ _/ /_
+ / _/ _ `/ __/ _ `/ / __/ _ \/ _ `/ __/
+/_/ \_,_/\__/\_,_/_/\__/_//_/\_,_/\__/ 
+</pre>
+    </div>
+
+    <div id="content">
+        <div class="chat-container" id="messages"></div>
+
+        <form id="composer-form">
+            <div id="composer">
+                <input id="input" autocomplete="off" placeholder="message">
+                <button id="send">send</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // --- setup ---
+        const roomId = location.search.slice(1);
+        const form = document.getElementById("composer-form");
+        const input = document.getElementById("input");
+        const box = document.getElementById("messages");
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        // --- helpers: base64url for the URL, hex for showing raw bytes ---
+        function toB64(bytes) {
+            let s = "";
+            bytes.forEach((b) => (s += String.fromCharCode(b)));
+            return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        }
+
+        function fromB64(str) {
+            str = str.replace(/-/g, "+").replace(/_/g, "/");
+            while (str.length % 4) str += "=";
+            return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+        }
+
+        function toHex(bytes) {
+            return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
+        }
+
+        // --- the bare URL is the only place a room and key get created ---
+        const creating = !roomId;
+        if (creating) {
+            const id = toB64(crypto.getRandomValues(new Uint8Array(8)));
+            const k = toB64(crypto.getRandomValues(new Uint8Array(32)));
+            location.replace("/" + id + "#" + k);
+        }
+
+        // --- read the key from the hash. Missing or malformed means null, never a new key ---
+        async function loadKey() {
+            const k = location.hash.slice(1);
+            if (!k) return null;
+            try {
+                const raw = fromB64(k);
+                if (raw.length !== 32) return null;   // a real key is exactly 32 bytes
+                return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+            } catch (e) {
+                return null;
+            }
+        }
+        const keyPromise = loadKey();
+
+        // the room ID is bound into every message, so a ciphertext copied into another room fails to decrypt
+        const aad = enc.encode(roomId);
+
+        // --- encrypt: fresh random IV each time, stored in front of the ciphertext ---
+        async function encrypt(text) {
+            const key = await keyPromise;
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const ct = new Uint8Array(
+                await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, enc.encode(text))
+            );
+            const out = new Uint8Array(12 + ct.length);
+            out.set(iv, 0);
+            out.set(ct, 12);
+            return toB64(out);
+        }
+
+        // --- decrypt: split the IV off the front, then decrypt the rest ---
+        async function decrypt(str) {
+            const key = await keyPromise;
+            if (!key) throw new Error("no key");
+            const bytes = fromB64(str);
+            const plain = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: bytes.slice(0, 12), additionalData: aad },
+                key,
+                bytes.slice(12)
+            );
+            return dec.decode(plain);
+        }
+
+        // --- display only: turn any string after the # into 32 bytes ---
+        // a valid key is used as-is, anything else is hashed, so each wrong key gives its own repeatable output
+        async function displayKeyBytes() {
+            const h = location.hash.slice(1);
+            try {
+                const raw = fromB64(h);
+                if (raw.length === 32) return raw;
+            } catch (e) { }
+            return new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(h)));
+        }
+
+        // --- display only: decrypt with no authentication check, so any key produces output ---
+        // never parse or trust this output, it skips the tamper check
+        async function garble(str) {
+            const bytes = fromB64(str);
+            const k = await crypto.subtle.importKey("raw", await displayKeyBytes(), "AES-CTR", false, ["decrypt"]);
+            const counter = new Uint8Array(16);
+            counter.set(bytes.slice(0, 12), 0);   // the IV
+            counter[15] = 2;                      // GCM's first data block counter
+            const out = await crypto.subtle.decrypt(
+                { name: "AES-CTR", counter, length: 32 },
+                k,
+                bytes.slice(12, bytes.length - 16)   // drop the IV in front and the 16-byte tag at the end
+            );
+            return new Uint8Array(out);
+        }
+
+        // --- no usable key: lock the composer so nobody posts messages nobody can read ---
+        function lockComposer(reason) {
+            input.disabled = true;
+            input.placeholder = reason;
+        }
+        keyPromise.then((k) => {
+            if (!k && !creating) lockComposer("no valid key in this link, read only");
+        });
+
+        // --- random username, made in the browser so the server never sees it ---
+        const adjectives = ["quiet", "red", "swift", "odd", "calm", "bold"];
+        const nouns = ["fox", "owl", "pine", "moth", "reed", "crow"];
+        const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+        let username = null;
+        try { username = sessionStorage.getItem("username"); } catch (e) { }
+        if (!username) {
+            username = pick(adjectives) + "_" + pick(nouns) + Math.floor(Math.random() * 100);
+            try { sessionStorage.setItem("username", username); } catch (e) { }
+        }
+
+        function colorFor(name) {
+            let h = 5381;
+            for (let i = 0; i < name.length; i++) {
+                h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;   // simple string hash
+            }
+            return "hsl(" + (h % 360) + ", 38%, 70%)";
+        }
+
+
+        // --- draw one message row ---
+        function addRow(user, text) {
+            const row = document.createElement("div");
+            row.className = "message-container";
+
+            const meta = document.createElement("div");
+            meta.className = "meta";
+            const name = document.createElement("span");
+            name.className = "author";
+            name.textContent = user;
+            if (user !== "???") name.style.color = colorFor(user);
+            meta.append(name);
+
+            const msg = document.createElement("div");
+            msg.className = "message";
+            msg.textContent = text;   // textContent stops typed HTML from running
+
+            row.append(meta, msg);
+            box.append(row);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // --- polling: fetch the list, decrypt what we can, show scrambled bytes for what we can't ---
+        let shown = 0;       // how many messages are already on screen
+        let polling = false; // stops two polls from running at once and drawing duplicates
+
+        async function poll() {
+            if (polling) return;
+            polling = true;
+            try {
+                const res = await fetch("/api/room/" + roomId);
+                const list = await res.json();
+                for (let i = shown; i < list.length; i++) {
+                    try {
+                        const m = JSON.parse(await decrypt(list[i]));
+                        addRow(m.u, m.t);
+                    } catch (e) {
+                        // wrong key or no key: show what a no-check decrypt gives with this key
+                        let shownBytes;
+                        try { shownBytes = await garble(list[i]); }
+                        catch (err) { shownBytes = enc.encode(list[i]); }
+                        addRow("???", toHex(shownBytes));
+                        // the very first message failing is a strong sign of a wrong key
+                        if (i === 0 && (await keyPromise)) lockComposer("wrong key for this room, read only");
+                    }
+                    shown = i + 1;
+                }
+            } catch (e) {
+                // server unreachable, try again on the next tick
+            }
+            polling = false;
+        }
+
+        // --- sending ---
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();                  // stops the page from navigating
+            const text = input.value.trim();
+            if (!text || input.disabled) return;
+            input.value = "";
+
+            const payload = await encrypt(JSON.stringify({ u: username, t: text }));
+
+            await fetch("/api/room/" + roomId, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: payload
+            });
+
+            poll();                              // show it right away
+        });
+
+        if (!creating) {
+            poll();
+            setInterval(poll, 1500);
+        }
+    </script>
+</body>
+
+</html>
