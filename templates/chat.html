@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>fatalchat</title>
+    <title>deltachat</title>
     <link rel="icon" href="/favicon.ico">
     <style>
         :root {
@@ -197,11 +197,14 @@
 <body>
     <div id="title-container">
         <pre class="title">
-   ___     __       __    __        __ 
-  / _/__ _/ /____ _/ /___/ /  ___ _/ /_
- / _/ _ `/ __/ _ `/ / __/ _ \/ _ `/ __/
-/_/ \_,_/\__/\_,_/_/\__/_//_/\_,_/\__/ 
-</pre>
+  ▄       ▗▖             
+ ▐█▖      ▐▌         ▐▌  
+ ▟▜▌  ▟██▖▐▙██▖ ▟██▖▐███ 
+ █ █ ▐▛  ▘▐▛ ▐▌ ▘▄▟▌ ▐▌  
+▐▛ ▜▖▐▌   ▐▌ ▐▌▗█▀▜▌ ▐▌  
+▟▙▄▟▌▝█▄▄▌▐▌ ▐▌▐▙▄█▌ ▐▙▄ 
+▀▀▀▀▀ ▝▀▀ ▝▘ ▝▘ ▀▀▝▘  ▀▀ 
+        </pre>
     </div>
 
     <div id="content">
@@ -471,7 +474,7 @@
 
                 if (added && document.hidden) {
                     unread += added;
-                    document.title = "(" + unread + ") fatalchat";
+                    document.title = "(" + unread + ") deltachat";
                 }
                 if (shown === 0) showHint();
             } catch (e) {
@@ -483,7 +486,7 @@
         document.addEventListener("visibilitychange", () => {
             if (!document.hidden) {
                 unread = 0;
-                document.title = "fatalchat";
+                document.title = "deltachat";
             }
         });
 

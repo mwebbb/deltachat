@@ -1,8 +1,8 @@
 # fatalchat
 
-temporary encrypted chat. open the site, get a link, send it to someone, chat it up
+temporary encrypted chat. open the site, get a link, send it to someone, chat
 
-the link looks like `chat.f8.al/?id#key`. everything after the `#` is the encryption key, and browsers never send that part to the server. messages get encrypted in your browser with AES-GCM before they leave, so the server only ever stores ciphertext.
+the link looks like `chat.delta.tf/?id#key`. everything after the `#` is the encryption key, and browsers never send that part to the server. messages get encrypted in your browser with AES-GCM before they leave, so the server only ever stores ciphertext.
 
 ## run it
 
