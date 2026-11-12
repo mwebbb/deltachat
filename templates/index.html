@@ -9,123 +9,53 @@
     <style>
         html,
         body {
-            height: 100%;
             margin: 0;
+            min-height: 100%;
         }
 
         body {
-            display: flex;
-            flex-direction: column;
             font-family: monospace;
-            font-size: 15px;
-            color: rgb(200, 205, 200);
+            font-size: 13px;
+            line-height: 1.5;
+            color: rgb(180, 185, 175);
             background-color: #303030;
         }
 
-        #title-container {
-            font-size: 15px;
-            display: flex;
-            justify-content: center;
-            padding-top: 1rem;
-        }
-
-        #content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: 900px;
+        main {
+            max-width: 780px;
             margin: 0 auto;
-            padding: 0 1rem 1.5rem;
+            padding: 1.5rem 1.25rem 3rem;
+            border-left: 1px solid #4a4a4a;
+            min-height: 100vh;
             box-sizing: border-box;
-            min-height: 0;
         }
 
-        .author {
-            color: rgb(180, 200, 180);
+        .title {
+            margin-bottom: 2rem;
+            overflow-x: auto;
+            color: rgb(200, 205, 200);
         }
 
-        .chat-container {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-            background: linear-gradient(to right,
-                    transparent 200px, #4a4a4a 200px,
-                    #4a4a4a 201px, transparent 201px);
+        p {
+            margin: 0;
         }
 
-        .chat-container> :first-child {
-            margin-top: auto;
+        .gap {
+            margin-top: 1rem;
         }
 
-        .message-container {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-        }
-
-        .meta {
-            text-align: right;
-            padding: 8px 14px 8px 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .message {
-            padding: 8px 14px;
+        a {
+            color: rgb(235, 238, 235);
+            text-decoration: none;
             overflow-wrap: anywhere;
         }
 
-        .message-container:nth-child(even) .message {
-            background-color: #383838;
+        a:hover {
+            text-decoration: underline;
         }
 
-        #composer {
-            display: flex;
-            align-items: stretch;
-            border-top: 1px solid #4a4a4a;
-            margin-top: 0;
-            padding: 0;
-        }
-
-        #input {
-            flex: 1;
-            min-width: 0;
-            font: inherit;
-            font-size: 16px;
-            color: rgb(230, 235, 230);
-            background: transparent;
-            border: none;
-            outline: none;
-            padding: 20px 14px 20px 215px;
-            /* 200px column + 1px divider + 14px, so typed text lines up with messages */
-        }
-
-        #input::placeholder {
+        .dim {
             color: rgb(120, 135, 120);
-        }
-
-        #send {
-            font: inherit;
-            color: rgb(180, 200, 180);
-            background: transparent;
-            border: none;
-            padding: 0 20px;
-            cursor: pointer;
-        }
-
-        #send:hover {
-            color: rgb(235, 238, 235);
-            background: transparent;
-        }
-
-        @media (max-width: 700px) {
-            #input {
-                padding-left: 14px;
-            }
         }
     </style>
 </head>

@@ -7,6 +7,10 @@
     <title>fatalchat</title>
     <link rel="icon" href="/favicon.ico">
     <style>
+        :root {
+            --col: 200px;
+        }
+
         html,
         body {
             height: 100%;
@@ -41,6 +45,46 @@
             min-height: 0;
         }
 
+        #bar {
+            display: flex;
+            align-items: stretch;
+            border-bottom: 1px solid #4a4a4a;
+            font-size: 13px;
+        }
+
+        #room {
+            flex: none;
+            width: calc(var(--col) + 1px);
+            box-sizing: border-box;
+            padding: 10px 14px 10px 0;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-right: 1px solid #4a4a4a;
+            color: rgb(120, 135, 120);
+        }
+
+        #status {
+            flex: 1;
+            padding: 10px 14px;
+            color: rgb(200, 120, 110);
+        }
+
+        #copy {
+            font: inherit;
+            font-size: 13px;
+            color: rgb(180, 200, 180);
+            background: transparent;
+            border: none;
+            padding: 0 14px;
+            cursor: pointer;
+        }
+
+        #copy:hover {
+            color: rgb(235, 238, 235);
+        }
+
         .author {
             color: rgb(180, 200, 180);
         }
@@ -53,8 +97,8 @@
             flex-direction: column;
             gap: 0;
             background: linear-gradient(to right,
-                    transparent 200px, #4a4a4a 200px,
-                    #4a4a4a 201px, transparent 201px);
+                    transparent var(--col), #4a4a4a var(--col),
+                    #4a4a4a calc(var(--col) + 1px), transparent calc(var(--col) + 1px));
         }
 
         .chat-container> :first-child {
@@ -63,7 +107,7 @@
 
         .message-container {
             display: grid;
-            grid-template-columns: 200px 1fr;
+            grid-template-columns: var(--col) 1fr;
         }
 
         .meta {
@@ -83,12 +127,30 @@
             background-color: #383838;
         }
 
+        .hint {
+            padding: 8px 14px 8px calc(var(--col) + 15px);
+            color: rgb(120, 135, 120);
+        }
+
         #composer {
             display: flex;
             align-items: stretch;
             border-top: 1px solid #4a4a4a;
             margin-top: 0;
             padding: 0;
+        }
+
+        #me {
+            flex: none;
+            width: calc(var(--col) + 1px);
+            box-sizing: border-box;
+            padding: 20px 14px 20px 0;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-right: 1px solid #4a4a4a;
+            color: rgb(180, 200, 180);
         }
 
         #input {
@@ -100,8 +162,7 @@
             background: transparent;
             border: none;
             outline: none;
-            padding: 20px 14px 20px 215px;
-            /* 200px column + 1px divider + 14px, so typed text lines up with messages */
+            padding: 20px 14px;
         }
 
         #input::placeholder {
@@ -119,12 +180,15 @@
 
         #send:hover {
             color: rgb(235, 238, 235);
-            background: transparent;
         }
 
         @media (max-width: 700px) {
-            #input {
-                padding-left: 14px;
+            :root {
+                --col: 110px;
+            }
+
+            #me {
+                padding-right: 10px;
             }
         }
     </style>
@@ -141,10 +205,16 @@
     </div>
 
     <div id="content">
+        <div id="bar">
+            <span id="room"></span>
+            <span id="status"></span>
+            <button id="copy" type="button">copy link</button>
+        </div>
         <div class="chat-container" id="messages"></div>
 
         <form id="composer-form">
             <div id="composer">
+                <span id="me"></span>
                 <input id="input" autocomplete="off" placeholder="message">
                 <button id="send">send</button>
             </div>
@@ -153,10 +223,15 @@
 
     <script>
         // --- setup ---
+        // the room id is everything after the ? and the key is everything after the #
         const roomId = location.search.slice(1);
         const form = document.getElementById("composer-form");
         const input = document.getElementById("input");
+        const sendBtn = document.getElementById("send");
         const box = document.getElementById("messages");
+        const statusEl = document.getElementById("status");
+        const copyBtn = document.getElementById("copy");
+        document.getElementById("room").textContent = "?" + roomId;
         const enc = new TextEncoder();
         const dec = new TextDecoder();
 
@@ -175,14 +250,6 @@
 
         function toHex(bytes) {
             return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
-        }
-
-        // --- the bare URL is the only place a room and key get created ---
-        const creating = !roomId;
-        if (creating) {
-            const id = toB64(crypto.getRandomValues(new Uint8Array(8)));
-            const k = toB64(crypto.getRandomValues(new Uint8Array(32)));
-            location.replace("/" + id + "#" + k);
         }
 
         // --- read the key from the hash. Missing or malformed means null, never a new key ---
@@ -205,6 +272,7 @@
         // --- encrypt: fresh random IV each time, stored in front of the ciphertext ---
         async function encrypt(text) {
             const key = await keyPromise;
+            if (!key) throw new Error("no key");
             const iv = crypto.getRandomValues(new Uint8Array(12));
             const ct = new Uint8Array(
                 await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, enc.encode(text))
@@ -258,15 +326,49 @@
         // --- no usable key: lock the composer so nobody posts messages nobody can read ---
         function lockComposer(reason) {
             input.disabled = true;
+            sendBtn.disabled = true;
             input.placeholder = reason;
         }
         keyPromise.then((k) => {
-            if (!k && !creating) lockComposer("no valid key in this link, read only");
+            if (!k) lockComposer("no valid key in this link, read only");
+        });
+
+        // --- small status line next to the copy button ---
+        let flashTimer;
+        function flash(msg) {
+            statusEl.textContent = msg;
+            clearTimeout(flashTimer);
+            flashTimer = setTimeout(() => (statusEl.textContent = ""), 4000);
+        }
+
+        // --- copy the invite link ---
+        copyBtn.addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(location.href);
+                copyBtn.textContent = "copied";
+            } catch (e) {
+                copyBtn.textContent = "copy failed";
+            }
+            setTimeout(() => (copyBtn.textContent = "copy link"), 1500);
         });
 
         // --- random username, made in the browser so the server never sees it ---
-        const adjectives = ["quiet", "red", "swift", "odd", "calm", "bold"];
-        const nouns = ["fox", "owl", "pine", "moth", "reed", "crow"];
+        const adjectives = [
+            "quiet", "red", "swift", "odd", "calm", "bold", "amber", "brisk", "clever", "dusty",
+            "eager", "faint", "gentle", "hazy", "icy", "jolly", "keen", "lucky", "mellow", "noble",
+            "pale", "proud", "rapid", "rustic", "silent", "sleepy", "smooth", "snowy", "spry", "sunny",
+            "tidy", "tiny", "vivid", "warm", "wild", "witty", "young", "zesty", "agile", "bright",
+            "cosmic", "crisp", "dizzy", "fuzzy", "golden", "humble", "jaded", "lunar", "misty", "nimble",
+            "plain", "quirky", "ruddy", "shy", "stormy", "sturdy", "velvet", "windy", "woolly", "frosty"
+        ];
+        const nouns = [
+            "fox", "owl", "pine", "moth", "reed", "crow", "badger", "beetle", "birch", "canyon",
+            "cedar", "comet", "coral", "dune", "eagle", "ember", "falcon", "fern", "finch", "fjord",
+            "gecko", "glacier", "harbor", "heron", "ibis", "island", "jaguar", "kelp", "lagoon", "lark",
+            "lynx", "maple", "marten", "meadow", "newt", "otter", "panda", "pebble", "plover", "quail",
+            "raven", "ridge", "robin", "sparrow", "spruce", "squid", "stoat", "tundra", "turtle", "valley",
+            "walrus", "willow", "wolf", "wren", "yak", "zephyr", "aspen", "bison", "cobra", "delta"
+        ];
         const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
         let username = null;
@@ -276,6 +378,7 @@
             try { sessionStorage.setItem("username", username); } catch (e) { }
         }
 
+        // same name always gives the same muted color, only the hue changes
         function colorFor(name) {
             let h = 5381;
             for (let i = 0; i < name.length; i++) {
@@ -284,9 +387,31 @@
             return "hsl(" + (h % 360) + ", 38%, 70%)";
         }
 
+        // show your own name next to the composer
+        const me = document.getElementById("me");
+        me.textContent = username;
+        me.style.color = colorFor(username);
+
+        // --- hint shown in an empty room ---
+        function clearHint() {
+            const h = box.querySelector(".hint");
+            if (h) h.remove();
+        }
+
+        async function showHint() {
+            const key = await keyPromise;
+            if (key && shown === 0 && !box.querySelector(".hint")) {
+                const h = document.createElement("div");
+                h.className = "hint";
+                h.textContent = "empty room. copy the link above and send it to someone to invite them.";
+                box.append(h);
+            }
+        }
 
         // --- draw one message row ---
         function addRow(user, text) {
+            clearHint();
+
             const row = document.createElement("div");
             row.className = "message-container";
 
@@ -304,12 +429,13 @@
 
             row.append(meta, msg);
             box.append(row);
-            box.scrollTop = box.scrollHeight;
         }
 
         // --- polling: fetch the list, decrypt what we can, show scrambled bytes for what we can't ---
-        let shown = 0;       // how many messages are already on screen
-        let polling = false; // stops two polls from running at once and drawing duplicates
+        let shown = 0;           // how many messages are already on screen
+        let polling = false;     // stops two polls from running at once and drawing duplicates
+        let forceStick = false;  // set after you send, so your own message scrolls into view
+        let unread = 0;          // messages that arrived while the tab was in the background
 
         async function poll() {
             if (polling) return;
@@ -317,6 +443,12 @@
             try {
                 const res = await fetch("/api/room/" + roomId);
                 const list = await res.json();
+
+                // only follow new messages if the view is already at the bottom
+                const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+                const stick = forceStick || shown === 0 || atBottom;
+                let added = 0;
+
                 for (let i = shown; i < list.length; i++) {
                     try {
                         const m = JSON.parse(await decrypt(list[i]));
@@ -331,35 +463,58 @@
                         if (i === 0 && (await keyPromise)) lockComposer("wrong key for this room, read only");
                     }
                     shown = i + 1;
+                    added++;
                 }
+
+                if (added && stick) box.scrollTop = box.scrollHeight;
+                forceStick = false;
+
+                if (added && document.hidden) {
+                    unread += added;
+                    document.title = "(" + unread + ") fatalchat";
+                }
+                if (shown === 0) showHint();
             } catch (e) {
                 // server unreachable, try again on the next tick
             }
             polling = false;
         }
 
-        // --- sending ---
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+                unread = 0;
+                document.title = "fatalchat";
+            }
+        });
+
+        // --- sending: if it fails, the text goes back in the box and a message shows ---
         form.addEventListener("submit", async (e) => {
             e.preventDefault();                  // stops the page from navigating
             const text = input.value.trim();
             if (!text || input.disabled) return;
             input.value = "";
 
-            const payload = await encrypt(JSON.stringify({ u: username, t: text }));
-
-            await fetch("/api/room/" + roomId, {
-                method: "POST",
-                headers: { "Content-Type": "text/plain" },
-                body: payload
-            });
-
-            poll();                              // show it right away
+            try {
+                const payload = await encrypt(JSON.stringify({ u: username, t: text }));
+                const res = await fetch("/api/room/" + roomId, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain" },
+                    body: payload
+                });
+                if (!res.ok) throw new Error("status " + res.status);
+                forceStick = true;
+                poll();                          // show it right away
+            } catch (err) {
+                input.value = text;
+                flash("send failed, your message is still in the box");
+            }
+            input.focus();
         });
 
-        if (!creating) {
-            poll();
-            setInterval(poll, 1500);
-        }
+        // --- start ---
+        input.focus();
+        poll();
+        setInterval(poll, 1500);
     </script>
 </body>
 
